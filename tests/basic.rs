@@ -2,45 +2,47 @@ use big_uf::*;
 
 #[test]
 fn basic() {
-	let thread_count = 20;
-	let id_count = 1000000;
+	let thread_count: u16 = 20;
+	let id_count: u64 = 10000000;
 
 	let (driver, threads) = Driver::ram_local_threads(thread_count);
 	let mut batcher = driver.batches_sender();
-	let recv = driver.receiver();
+	let recv = driver.receiver().clone();
 
-	let start_time = std::time::Instant::now();
-	for thread in 0..thread_count {
-		for id in 0..id_count {
-			batcher.add_node(id, thread)
-		}
-	}
-	batcher.flush();
-	let mut nodes = Vec::new();
-	while nodes.len() < (thread_count as u64 * id_count) as usize {
-		for msg in recv.recv().unwrap() {
-			match msg {
-				DriverMessage::UnionDone { req_id: _ } => {
-					panic!("There should be no unions")
-				}
-				DriverMessage::FindDone {
-					req_id: _,
-					response: _,
-				} => {
-					panic!("There should be no find")
-				}
-				DriverMessage::AddNodeDone {
-					req_id: _,
-					response: key,
-				} => {
-					nodes.push(key);
-				}
-				DriverMessage::ShutdownDone { req_id: _ } => {
-					panic!("There should be no Shutdown");
+	let results_processing = std::thread::spawn(move || {
+		let mut nodes = Vec::new();
+		while (nodes.len() as u64) < id_count {
+			for msg in recv.recv().unwrap() {
+				match msg {
+					DriverMessage::UnionDone { req_id: _ } => {
+						panic!("There should be no unions")
+					}
+					DriverMessage::FindDone {
+						req_id: _,
+						response: _,
+					} => {
+						panic!("There should be no find")
+					}
+					DriverMessage::AddNodeDone {
+						req_id: _,
+						response: key,
+					} => {
+						nodes.push(key);
+					}
+					DriverMessage::ShutdownDone { req_id: _ } => {
+						panic!("There should be no Shutdown");
+					}
 				}
 			}
 		}
+	});
+
+	let start_time = std::time::Instant::now();
+	for id in 0..id_count {
+		batcher.add_node(id, (id % thread_count as u64) as u16)
 	}
+	batcher.flush();
+	results_processing.join().unwrap();
 	let elapsed = start_time.elapsed();
 	dbg!(elapsed);
 
