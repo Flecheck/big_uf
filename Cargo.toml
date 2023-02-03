@@ -1,0 +1,8 @@
+[package]
+	edition = "2021"
+	name = "big_uf"
+	version = "0.1.0"
+
+[dependencies]
+	crossbeam-channel = "0.5"
+	futures = "0.3"
