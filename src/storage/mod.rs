@@ -2,7 +2,7 @@ pub mod ram;
 
 use crate::prelude::*;
 
-pub trait Storage: Default {
+pub(crate) trait Storage: Default {
 	fn set_parent(&mut self, key: Key, value: Key);
 	fn set_sibling(&mut self, key: Key, value: Key);
 	fn swap_child(&mut self, key: Key, value: Key) -> Key;

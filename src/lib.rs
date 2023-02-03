@@ -1,20 +1,22 @@
+mod driver;
 mod key;
-mod message;
+mod message_batching;
 mod storage;
-mod system;
-mod system_message_batching;
 mod thread;
 
 mod prelude {
 	use super::*;
 
 	pub(crate) use {
+		driver::{
+			message::{DriverMessage, ReqId},
+			Driver,
+		},
 		key::Key,
-		message::Message,
+		message_batching::MessageBatching,
 		storage::Storage,
-		system::{UnionFindSystem, UnionFindThreadAccess},
-		system_message_batching::SystemMessageBatching,
+		thread::{message::ThreadMessage, ThreadAccess},
 	};
 }
 
-pub use system::UnionFindSystem;
+pub use driver::{message::DriverMessage, Driver};
