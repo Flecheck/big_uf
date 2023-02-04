@@ -2,7 +2,7 @@ mod driver;
 mod key;
 mod message_batching;
 mod shard;
-mod storage;
+pub mod storage;
 mod system;
 
 mod prelude {

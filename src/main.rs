@@ -3,14 +3,18 @@ use big_uf::*;
 fn main() {
 	let shard_count: u16 = 30;
 	let driver_count: usize = 10;
-	let id_count: u64 = 1_000_000_000;
+	let id_count: u64 = 10_000_000;
 
 	rayon::ThreadPoolBuilder::new()
 		.num_threads(2 * (driver_count as usize) + 1)
 		.build_global()
 		.unwrap();
 
-	let (mut drivers, shards) = System::ram_local_shards(driver_count, shard_count);
+	let (mut drivers, shards) = System::local_shards(
+		|_| storage::ram::RamStorage::default,
+		driver_count,
+		shard_count,
+	);
 
 	let barrier = std::sync::Barrier::new(2 * (driver_count as usize) + 1);
 

@@ -4,7 +4,8 @@ use std::sync::Arc;
 
 use crate::prelude::*;
 
-pub(crate) fn spawn<S: Storage>(
+pub(crate) fn spawn<S: Storage, F: FnOnce() -> S + Send + 'static>(
+	storage_fn: F,
 	system: Arc<System>,
 	receiver: crossbeam_channel::Receiver<Vec<ShardMessage>>,
 	shard_idx: usize,
@@ -14,7 +15,7 @@ pub(crate) fn spawn<S: Storage>(
 			other_shard_batching: MessageBatching::new(system),
 			current_shard_pending_messages: Vec::new(),
 			shard_idx,
-			storage: S::default(),
+			storage: storage_fn(),
 		};
 		let mut n_processed_messages_without_flush = 0;
 

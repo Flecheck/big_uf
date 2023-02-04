@@ -1,6 +1,6 @@
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct Key {
-	inner: u64,
+	pub(crate) inner: u64,
 }
 
 impl Key {

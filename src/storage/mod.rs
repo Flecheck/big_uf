@@ -1,8 +1,9 @@
 pub mod ram;
+pub mod rocksdb;
 
 use crate::prelude::*;
 
-pub(crate) trait Storage: Default {
+pub trait Storage {
 	fn set_parent(&mut self, key: Key, value: Key);
 	fn set_sibling(&mut self, key: Key, value: Key);
 	fn swap_child(&mut self, key: Key, value: Key) -> Key;

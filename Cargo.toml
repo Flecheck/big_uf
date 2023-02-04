@@ -5,7 +5,9 @@
 
 [dependencies]
 	crossbeam-channel = "0.5"
+	ouroboros = "0.15"
 	rayon = "1"
+	rocksdb = "0.19"
 
 [profile.test]
 	opt-level = 2

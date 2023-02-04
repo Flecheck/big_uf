@@ -8,10 +8,15 @@ pub struct System {
 }
 
 impl System {
-	pub fn ram_local_shards(
+	pub fn local_shards<S: Storage, F, F2>(
+		storage: F,
 		n_drivers: usize,
 		n_shards: u16,
-	) -> (Vec<Driver>, Vec<std::thread::JoinHandle<()>>) {
+	) -> (Vec<Driver>, Vec<std::thread::JoinHandle<()>>)
+	where
+		F: Fn(usize) -> F2,
+		F2: FnOnce() -> S + Send + 'static,
+	{
 		let (drivers_accesses, drivers_receivers): (Vec<_>, Vec<_>) = (0..n_drivers)
 			.map(|_| {
 				let (s, r) = crossbeam_channel::unbounded::<Vec<DriverMessage>>();
@@ -42,13 +47,7 @@ impl System {
 		let local_shards_join_handles = shards_receivers
 			.into_iter()
 			.enumerate()
-			.map(|(idx, receiver)| {
-				crate::shard::spawn::<crate::storage::ram::RamStorage>(
-					system.clone(),
-					receiver,
-					idx,
-				)
-			})
+			.map(|(idx, receiver)| crate::shard::spawn(storage(idx), system.clone(), receiver, idx))
 			.collect();
 		(drivers, local_shards_join_handles)
 	}
