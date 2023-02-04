@@ -95,14 +95,14 @@ impl<'s> MessageBatching<'s> {
 
 	pub fn flush(&mut self) {
 		for (target_thread, batch) in self.thread_message_batches.iter_mut().enumerate() {
-			if batch.len() > 0 {
+			if !batch.is_empty() {
 				self.driver
 					.thread(target_thread)
 					.send_messages(std::mem::replace(batch, Vec::new()));
 			}
 		}
 		for (target_driver, batch) in self.driver_message_batches.iter_mut().enumerate() {
-			if batch.len() > 0 {
+			if !batch.is_empty() {
 				self.driver
 					.driver(target_driver)
 					.send_messages(std::mem::replace(batch, Vec::new()));
