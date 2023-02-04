@@ -1,9 +1,8 @@
 use big_uf::*;
 
-#[test]
-fn basic() {
-	let thread_count: u16 = 4;
-	let id_count: u64 = 10000000;
+fn main() {
+	let thread_count: u16 = 20;
+	let id_count: u64 = 10_000_000;
 
 	let (driver, threads) = Driver::ram_local_threads(thread_count);
 	let mut batcher = driver.batches_sender();

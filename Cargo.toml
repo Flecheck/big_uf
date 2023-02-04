@@ -5,7 +5,9 @@
 
 [dependencies]
 	crossbeam-channel = "0.5"
-	futures = "0.3"
 
 [profile.test]
 	opt-level = 3
+
+[profile.release]
+	debug = 2

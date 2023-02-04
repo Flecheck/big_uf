@@ -21,7 +21,7 @@ pub(crate) fn spawn<S: Storage>(
 		loop {
 			let mut maybe_flush = |thread_data: &mut UnionFindThreadData<'_, S>| {
 				n_processed_messages_without_flush += 1;
-				if n_processed_messages_without_flush > 10000 {
+				if n_processed_messages_without_flush > 10_000_000 {
 					thread_data.other_thread_batching.flush();
 				}
 			};

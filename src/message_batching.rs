@@ -63,7 +63,7 @@ impl<'s> MessageBatching<'s> {
 			driver: &driver,
 			thread_message_batches: (0..driver.n_threads()).map(|_| Vec::new()).collect(),
 			driver_message_batches: (0..driver.n_drivers()).map(|_| Vec::new()).collect(),
-			batch_len: 500,
+			batch_len: 1_000_000,
 		}
 	}
 
