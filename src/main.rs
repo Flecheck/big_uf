@@ -2,7 +2,7 @@ use big_uf::*;
 
 fn main() {
 	let thread_count: u16 = 20;
-	let id_count: u64 = 10_000_000;
+	let id_count: u64 = 100_000_000;
 
 	let (driver, threads) = Driver::ram_local_threads(thread_count);
 	let mut batcher = driver.batches_sender();
@@ -37,7 +37,6 @@ fn main() {
 	});
 
 	let start_time = std::time::Instant::now();
-	batcher.batch_len = usize::MAX;
 	for id in 0..id_count {
 		batcher.add_node(id, (id % thread_count as u64) as u16)
 	}
