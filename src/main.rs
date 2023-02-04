@@ -1,7 +1,7 @@
 use big_uf::*;
 
 fn main() {
-	let shard_count: u16 = 30;
+	let shard_count: u16 = 20;
 	let driver_count: usize = 10;
 	let id_count: u64 = 10_000_000;
 
@@ -11,7 +11,11 @@ fn main() {
 		.unwrap();
 
 	let (mut drivers, shards) = System::local_shards(
-		|_| storage::ram::RamStorage::default,
+		|shard_idx| {
+			move || {
+				storage::rocksdb::RocksDbStorage::from_path(format!("./rocksdbs/{shard_idx}.db"))
+			}
+		},
 		driver_count,
 		shard_count,
 	);

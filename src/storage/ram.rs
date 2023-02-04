@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-pub struct NodeData {
+struct NodeData {
 	parent: Key,
 	sibling: Key,
 	child: Key,

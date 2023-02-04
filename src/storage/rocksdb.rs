@@ -16,8 +16,12 @@ pub struct RocksDbStorage {
 
 impl RocksDbStorage {
 	pub fn from_path(path: impl AsRef<std::path::Path>) -> Self {
-		let db = rocksdb::DB::open_cf(&Options::default(), path, &["parent", "child", "sibling"])
-			.expect("Failed to open RocksDB database");
+		let options = &mut Options::default();
+		options.create_if_missing(true);
+		let mut db = rocksdb::DB::open(options, path).expect("Failed to open RocksDB database");
+		for name in ["parent", "child", "sibling"] {
+			db.create_cf(name, &Options::default()).unwrap();
+		}
 		Self::new(
 			db,
 			|db| db.cf_handle("parent").unwrap(),
