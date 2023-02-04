@@ -13,7 +13,7 @@ pub struct RamStorage {
 
 impl RamStorage {
 	fn get(&self, key: Key, selector: impl Fn(&NodeData) -> Key) -> Option<Key> {
-		let x = &self.store[key.thread_specific_id() as usize];
+		let x = &self.store[key.shard_specific_id() as usize];
 		let x = selector(x);
 		if x == key {
 			None
@@ -23,7 +23,7 @@ impl RamStorage {
 	}
 
 	fn set(&mut self, key: Key, selector: impl Fn(&mut NodeData) -> &mut Key, value: Key) -> Key {
-		let x = &mut self.store[key.thread_specific_id() as usize];
+		let x = &mut self.store[key.shard_specific_id() as usize];
 		let x = selector(x);
 		let old = *x;
 		*x = value;
@@ -56,9 +56,9 @@ impl Storage for RamStorage {
 		self.get(key, |x| x.child)
 	}
 
-	fn add_node(&mut self, thread: usize) -> Key {
-		let thread_specific_id = self.store.len();
-		let key = Key::new(thread, thread_specific_id as u64);
+	fn add_node(&mut self, shard: usize) -> Key {
+		let shard_specific_id = self.store.len();
+		let key = Key::new(shard, shard_specific_id as u64);
 
 		self.store.push(NodeData {
 			parent: key,

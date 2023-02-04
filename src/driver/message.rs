@@ -24,10 +24,10 @@ pub struct ReqId {
 }
 
 impl ReqId {
-	pub fn new(driver: usize, thread_specific_id: u64) -> Self {
-		assert!(driver <= (u16::MAX as usize) && thread_specific_id <= 0x0000FFFFFFFF);
+	pub fn new(driver: usize, shard_specific_id: u64) -> Self {
+		assert!(driver <= (u16::MAX as usize) && shard_specific_id <= 0x0000FFFFFFFF);
 		Self {
-			inner: ((driver as u64) << 48) | thread_specific_id,
+			inner: ((driver as u64) << 48) | shard_specific_id,
 		}
 	}
 	pub fn driver(self) -> usize {
@@ -41,8 +41,8 @@ impl ReqId {
 impl std::fmt::Debug for ReqId {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("ReqId")
-			.field("thread", &self.driver())
-			.field("thread_specific_id", &self.driver_specific_id())
+			.field("shard", &self.driver())
+			.field("shard_specific_id", &self.driver_specific_id())
 			.finish()
 	}
 }

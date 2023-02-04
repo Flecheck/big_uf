@@ -11,5 +11,5 @@ pub(crate) trait Storage: Default {
 	fn get_sibling(&self, key: Key) -> Option<Key>;
 	fn get_child(&self, key: Key) -> Option<Key>;
 
-	fn add_node(&mut self, thread: usize) -> Key;
+	fn add_node(&mut self, shard: usize) -> Key;
 }

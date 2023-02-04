@@ -1,63 +1,24 @@
 pub(crate) mod message;
 
-use std::sync::Arc;
-
 use crate::prelude::*;
 
 pub struct Driver {
+	message_batching: MessageBatching,
 	driver_id: usize,
-	drivers: Vec<Box<dyn DriverAccess>>,
-	threads: Vec<Box<dyn ThreadAccess>>,
 	receiver: crossbeam_channel::Receiver<Vec<DriverMessage>>,
 }
 
 impl Driver {
-	pub fn ram_local_threads(n: u16) -> (Arc<Self>, Vec<std::thread::JoinHandle<()>>) {
-		let (system_sender, system_receiver) = crossbeam_channel::unbounded();
-		let (threads, receivers): (Vec<_>, Vec<_>) = (0..n)
-			.map(|_| {
-				let (s, r) = crossbeam_channel::unbounded::<Vec<ThreadMessage>>();
-				(Box::new(s) as Box<dyn ThreadAccess>, r)
-			})
-			.unzip();
-		let union_find_system = Arc::new(Self {
-			driver_id: 0,
-			drivers: vec![Box::new(system_sender) as Box<dyn DriverAccess>],
-			threads,
-			receiver: system_receiver,
-		});
-		let local_threads_join_handles = receivers
-			.into_iter()
-			.enumerate()
-			.map(|(idx, receiver)| {
-				crate::thread::spawn::<crate::storage::ram::RamStorage>(
-					union_find_system.clone(),
-					receiver,
-					idx,
-				)
-			})
-			.collect();
-		(union_find_system, local_threads_join_handles)
-	}
-
-	pub(crate) fn thread(&self, thread_id: usize) -> &dyn ThreadAccess {
-		&*self.threads[thread_id]
-	}
-
-	pub(crate) fn driver(&self, driver_id: usize) -> &dyn DriverAccess {
-		&*self.drivers[driver_id]
-	}
-
-	pub fn batches_sender(&self) -> MessageBatching {
-		MessageBatching::new(self)
-	}
-
-	pub fn n_threads(&self) -> usize {
-		self.threads.len()
-	}
-
-	pub fn n_drivers(&self) -> usize {
-		self.drivers.len()
+	pub(crate) fn new(
+		message_batching: MessageBatching,
+		driver_id: usize,
+		receiver: crossbeam_channel::Receiver<Vec<DriverMessage>>,
+	) -> Self {
+		Driver {
+			message_batching,
+			driver_id,
+			receiver,
+		}
 	}
 
 	pub fn driver_id(&self) -> usize {
@@ -66,6 +27,68 @@ impl Driver {
 
 	pub fn receiver(&self) -> &crossbeam_channel::Receiver<Vec<DriverMessage>> {
 		&self.receiver
+	}
+
+	// You should flush if you want stuff to happen
+	pub fn add_node(&mut self, req_id: u64, shard: u16) {
+		self.message_batching.send_to_shard(ShardMessage::AddNode {
+			shard,
+			req_id: self.req_id(req_id),
+		})
+	}
+
+	/// You should flush if you want stuff to happen
+	pub fn union(&mut self, req_id: u64, node: Key, to: Key) {
+		self.message_batching.send_to_shard(ShardMessage::Union {
+			node,
+			to,
+			child: node,
+			req_id: self.req_id(req_id),
+		})
+	}
+
+	/// You should flush if you want to get a result at some point
+	pub fn find(&mut self, req_id: u64, node: Key) {
+		self.message_batching.send_to_shard(ShardMessage::Find {
+			node,
+			child: node,
+			req_id: self.req_id(req_id),
+		});
+	}
+
+	/// Expects that all the message queues are empty (all sent messages have already
+	/// been processed), otherwise may trigger a panic
+	pub fn shutdown_all_and_wait_for_completion(mut self) {
+		for shard in 0..(self.system().n_shards() as u64) {
+			self.message_batching
+				.send_to_shard(ShardMessage::GracefulShutdown {
+					shard: shard as u16,
+					req_id: self.req_id(shard),
+				});
+		}
+		self.message_batching.flush();
+
+		let mut messages = self.receiver().into_iter().flatten();
+		for _ in 0..self.system().n_shards() {
+			match messages
+				.next()
+				.expect("Not all shards have shutdown and we lost the driver channel")
+			{
+				DriverMessage::ShutdownDone { .. } => {}
+				_ => panic!("all other send messages should have already been processed"),
+			}
+		}
+	}
+	pub fn flush(&mut self) {
+		self.message_batching.flush();
+	}
+
+	pub(crate) fn req_id(&self, req_id: u64) -> ReqId {
+		ReqId::new(self.driver_id(), req_id)
+	}
+
+	pub(crate) fn system(&self) -> &System {
+		&self.message_batching.system
 	}
 }
 

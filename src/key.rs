@@ -4,16 +4,16 @@ pub struct Key {
 }
 
 impl Key {
-	pub fn new(thread: usize, thread_specific_id: u64) -> Self {
-		assert!(thread <= (u16::MAX as usize) && thread_specific_id <= 0x0000FFFFFFFF);
+	pub fn new(shard: usize, shard_specific_id: u64) -> Self {
+		assert!(shard <= (u16::MAX as usize) && shard_specific_id <= 0x0000FFFFFFFF);
 		Self {
-			inner: ((thread as u64) << 48) | thread_specific_id,
+			inner: ((shard as u64) << 48) | shard_specific_id,
 		}
 	}
-	pub fn thread(self) -> usize {
+	pub fn shard(self) -> usize {
 		(self.inner >> 48) as usize
 	}
-	pub fn thread_specific_id(self) -> u64 {
+	pub fn shard_specific_id(self) -> u64 {
 		self.inner & 0x0000FFFFFFFF
 	}
 }
@@ -21,8 +21,8 @@ impl Key {
 impl std::fmt::Debug for Key {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("Key")
-			.field("thread", &self.thread())
-			.field("thread_specific_id", &self.thread_specific_id())
+			.field("shard", &self.shard())
+			.field("shard_specific_id", &self.shard_specific_id())
 			.finish()
 	}
 }
