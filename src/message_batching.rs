@@ -44,6 +44,13 @@ impl<'s> MessageBatching<'s> {
 				req_id: self.req_id(thread),
 			});
 		}
+		for id in 0..self.driver.n_drivers() {
+			if id != self.driver.driver_id() {
+				self.send_to_driver(DriverMessage::ShutdownDriver {
+					target_driver: id as u16,
+				});
+			}
+		}
 		self.flush();
 
 		let mut messages = self.driver.receiver().into_iter().flatten();

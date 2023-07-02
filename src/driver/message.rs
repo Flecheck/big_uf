@@ -1,10 +1,14 @@
+use serde::{Deserialize, Serialize};
+
 use crate::prelude::*;
 
+#[derive(Deserialize, Serialize, Debug)]
 pub enum DriverMessage {
 	UnionDone { req_id: ReqId },
 	FindDone { req_id: ReqId, response: Key },
 	AddNodeDone { req_id: ReqId, response: Key },
 	ShutdownDone { req_id: ReqId },
+	ShutdownDriver { target_driver: u16 },
 }
 
 impl DriverMessage {
@@ -14,11 +18,12 @@ impl DriverMessage {
 			DriverMessage::FindDone { req_id, .. } => req_id.driver(),
 			DriverMessage::AddNodeDone { req_id, .. } => req_id.driver(),
 			DriverMessage::ShutdownDone { req_id, .. } => req_id.driver(),
+			DriverMessage::ShutdownDriver { target_driver } => target_driver as usize,
 		}
 	}
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Deserialize, Serialize)]
 pub struct ReqId {
 	inner: u64,
 }

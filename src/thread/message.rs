@@ -1,5 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 use crate::prelude::*;
 
+#[derive(Deserialize, Serialize, Debug)]
 pub(crate) enum ThreadMessage {
 	AddNode {
 		thread: u16,

@@ -1,4 +1,6 @@
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+use serde::{Deserialize, Serialize};
+
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Deserialize, Serialize)]
 pub struct Key {
 	inner: u64,
 }
