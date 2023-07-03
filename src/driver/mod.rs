@@ -19,10 +19,11 @@ use crate::driver::network_message::Codec;
 use crate::driver::network_message::NetworkMessage;
 use crate::prelude::*;
 use crate::thread;
+use crate::thread::RemoteThreadAccess;
 
 pub struct Driver {
 	driver_id: usize,
-	drivers: Vec<Arc<dyn DriverAccess>>,
+	drivers: Vec<Box<dyn DriverAccess>>,
 	threads: Vec<Box<dyn ThreadAccess>>,
 	receiver: crossbeam_channel::Receiver<Vec<DriverMessage>>,
 }
@@ -38,7 +39,7 @@ impl Driver {
 			.unzip();
 		let union_find_system = Arc::new(Self {
 			driver_id: 0,
-			drivers: vec![Arc::new(system_sender) as Arc<dyn DriverAccess>],
+			drivers: vec![Box::new(system_sender) as Box<dyn DriverAccess>],
 			threads,
 			receiver: system_receiver,
 		});
@@ -90,13 +91,10 @@ impl Driver {
 		}
 
 		let (s, r) = crossbeam_channel::unbounded();
-		let (driver_access, receiver_driver) = (Arc::new(s) as Arc<dyn DriverAccess>, r);
+		let (driver_access, receiver_driver) = (Box::new(s) as Box<dyn DriverAccess>, r);
 
-		let (driver_accesses, receivers_drivers): (Vec<_>, Vec<_>) = (1..connect_to.len())
-			.map(|_| {
-				let (s, r) = futures::channel::mpsc::unbounded();
-				(Arc::new(s) as Arc<dyn DriverAccess>, r)
-			})
+		let (driver_senders, receivers_drivers): (Vec<_>, Vec<_>) = (1..connect_to.len())
+			.map(|_| futures::channel::mpsc::unbounded())
 			.unzip();
 
 		let (local_threads_access, local_receivers_threads): (Vec<_>, Vec<_>) = (0
@@ -107,12 +105,26 @@ impl Driver {
 			})
 			.unzip();
 
+		let remote_thread_access = driver_senders.iter().zip(1..).map(|(s, thread_id)| {
+			Box::new(RemoteThreadAccess {
+				thread_id,
+				driver_channel: s.clone(),
+			}) as Box<dyn ThreadAccess>
+		});
+
 		let union_find_system = Arc::new(Self {
 			driver_id: 0,
 			drivers: std::iter::once(driver_access)
-				.chain(driver_accesses.iter().cloned())
+				.chain(
+					driver_senders
+						.iter()
+						.map(|s| Box::new(s.clone()) as Box<dyn DriverAccess>),
+				)
 				.collect(),
-			threads: local_threads_access, /* TODO : add remote threads */
+			threads: local_threads_access
+				.into_iter()
+				.chain(remote_thread_access)
+				.collect(),
 			receiver: receiver_driver,
 		});
 
@@ -147,7 +159,7 @@ impl Driver {
 		// 		})
 		// 	})
 		// 	.collect::<FuturesUnordered<_>>();
-
+		let futures = todo!();
 		Ok((union_find_system, local_threads_join_handles, futures))
 	}
 
@@ -238,6 +250,12 @@ pub(crate) trait DriverAccess: Sync + Send {
 impl DriverAccess for crossbeam_channel::Sender<Vec<DriverMessage>> {
 	fn send_messages(&self, batch: Vec<DriverMessage>) {
 		self.send(batch).unwrap()
+	}
+}
+
+impl DriverAccess for futures::channel::mpsc::UnboundedSender<Vec<DriverMessage>> {
+	fn send_messages(&self, batch: Vec<DriverMessage>) {
+		futures::executor::block_on(self.clone().send(batch)).unwrap()
 	}
 }
 

@@ -4,11 +4,27 @@ use crate::prelude::*;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum DriverMessage {
-	UnionDone { req_id: ReqId },
-	FindDone { req_id: ReqId, response: Key },
-	AddNodeDone { req_id: ReqId, response: Key },
-	ShutdownDone { req_id: ReqId },
-	ShutdownDriver { target_driver: u16 },
+	UnionDone {
+		req_id: ReqId,
+	},
+	FindDone {
+		req_id: ReqId,
+		response: Key,
+	},
+	AddNodeDone {
+		req_id: ReqId,
+		response: Key,
+	},
+	ShutdownDone {
+		req_id: ReqId,
+	},
+	ShutdownDriver {
+		target_driver: u16,
+	},
+	Forward {
+		thread_id: u16,
+		message: ThreadMessage,
+	},
 }
 
 impl DriverMessage {
@@ -19,6 +35,10 @@ impl DriverMessage {
 			DriverMessage::AddNodeDone { req_id, .. } => req_id.driver(),
 			DriverMessage::ShutdownDone { req_id, .. } => req_id.driver(),
 			DriverMessage::ShutdownDriver { target_driver } => target_driver as usize,
+			DriverMessage::Forward {
+				thread_id: _,
+				message: _,
+			} => unimplemented!(),
 		}
 	}
 }

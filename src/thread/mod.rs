@@ -2,6 +2,8 @@ pub(crate) mod message;
 
 use std::sync::Arc;
 
+use futures::SinkExt;
+
 use crate::prelude::*;
 
 pub(crate) fn spawn<S: Storage>(
@@ -187,5 +189,27 @@ pub(crate) trait ThreadAccess: Sync + Send {
 impl ThreadAccess for crossbeam_channel::Sender<Vec<ThreadMessage>> {
 	fn send_messages(&self, batch: Vec<ThreadMessage>) {
 		self.send(batch).unwrap()
+	}
+}
+
+pub(crate) struct RemoteThreadAccess {
+	pub thread_id: u16,
+	pub driver_channel: futures::channel::mpsc::UnboundedSender<Vec<DriverMessage>>,
+}
+
+impl ThreadAccess for RemoteThreadAccess {
+	fn send_messages(&self, batch: Vec<ThreadMessage>) {
+		futures::executor::block_on(
+			self.driver_channel.clone().send(
+				batch
+					.into_iter()
+					.map(|m| DriverMessage::Forward {
+						thread_id: self.thread_id,
+						message: m,
+					})
+					.collect(),
+			),
+		)
+		.unwrap()
 	}
 }
