@@ -4,24 +4,25 @@ use bytes::{Buf, BufMut, BytesMut};
 use serde::{Deserialize, Serialize};
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::{prelude::ThreadMessage, DriverMessage};
+use crate::{prelude::ShardMessage, DriverMessage};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub(crate) enum NetworkMessage {
 	Hello {
 		id: u16,
-		num_thread: u16,
+		num_shard: u16,
 		connect_to: Vec<(IpAddr, u16)>,
 	},
 	Id {
 		id: u16,
 	},
 	DriverMessage {
+		driver_idx: u16,
 		message: DriverMessage,
 	},
-	ThreadMessage {
-		id: u16,
-		message: ThreadMessage,
+	ShardMessage {
+		shard_idx: u16,
+		message: ShardMessage,
 	},
 }
 

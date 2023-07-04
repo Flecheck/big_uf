@@ -4,27 +4,10 @@ use crate::prelude::*;
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum DriverMessage {
-	UnionDone {
-		req_id: ReqId,
-	},
-	FindDone {
-		req_id: ReqId,
-		response: Key,
-	},
-	AddNodeDone {
-		req_id: ReqId,
-		response: Key,
-	},
-	ShutdownDone {
-		req_id: ReqId,
-	},
-	ShutdownDriver {
-		target_driver: u16,
-	},
-	Forward {
-		thread_id: u16,
-		message: ThreadMessage,
-	},
+	UnionDone { req_id: ReqId },
+	FindDone { req_id: ReqId, response: Key },
+	AddNodeDone { req_id: ReqId, response: Key },
+	ShutdownDone { req_id: ReqId },
 }
 
 impl DriverMessage {
@@ -34,11 +17,6 @@ impl DriverMessage {
 			DriverMessage::FindDone { req_id, .. } => req_id.driver(),
 			DriverMessage::AddNodeDone { req_id, .. } => req_id.driver(),
 			DriverMessage::ShutdownDone { req_id, .. } => req_id.driver(),
-			DriverMessage::ShutdownDriver { target_driver } => target_driver as usize,
-			DriverMessage::Forward {
-				thread_id: _,
-				message: _,
-			} => unimplemented!(),
 		}
 	}
 }
@@ -49,10 +27,10 @@ pub struct ReqId {
 }
 
 impl ReqId {
-	pub fn new(driver: usize, thread_specific_id: u64) -> Self {
-		assert!(driver <= (u16::MAX as usize) && thread_specific_id <= 0x0000FFFFFFFF);
+	pub fn new(driver: usize, shard_specific_id: u64) -> Self {
+		assert!(driver <= (u16::MAX as usize) && shard_specific_id <= 0x0000FFFFFFFF);
 		Self {
-			inner: ((driver as u64) << 48) | thread_specific_id,
+			inner: ((driver as u64) << 48) | shard_specific_id,
 		}
 	}
 	pub fn driver(self) -> usize {
@@ -66,8 +44,8 @@ impl ReqId {
 impl std::fmt::Debug for ReqId {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("ReqId")
-			.field("thread", &self.driver())
-			.field("thread_specific_id", &self.driver_specific_id())
+			.field("shard", &self.driver())
+			.field("shard_specific_id", &self.driver_specific_id())
 			.finish()
 	}
 }

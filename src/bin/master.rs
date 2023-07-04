@@ -4,7 +4,7 @@ use big_uf::*;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-	Driver::connect(
+	System::connect(
 		1,
 		vec![
 			(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 10000),

@@ -1,8 +1,10 @@
 mod driver;
 mod key;
 mod message_batching;
-mod storage;
-mod thread;
+mod network_message;
+mod shard;
+pub mod storage;
+mod system;
 
 mod prelude {
 	use super::*;
@@ -10,13 +12,17 @@ mod prelude {
 	pub(crate) use {
 		driver::{
 			message::{DriverMessage, ReqId},
-			Driver,
+			Driver, DriverAccess,
 		},
 		key::Key,
 		message_batching::MessageBatching,
+		shard::{message::ShardMessage, ShardAccess},
 		storage::Storage,
-		thread::{message::ThreadMessage, ThreadAccess},
+		system::System,
 	};
 }
 
-pub use driver::{message::DriverMessage, Driver};
+pub use {
+	driver::{message::DriverMessage, Driver},
+	system::System,
+};

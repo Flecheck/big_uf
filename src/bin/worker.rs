@@ -7,5 +7,5 @@ async fn main() {
 		.expect("You should put the port as first parameter")
 		.parse()
 		.expect("Couldn't parse the port");
-	Driver::server(args).await.unwrap();
+	System::server(args).await.unwrap();
 }
