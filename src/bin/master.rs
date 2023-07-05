@@ -5,7 +5,7 @@ use big_uf::*;
 #[tokio::main()]
 async fn main() {
 	let (mut driver, system, _threads, _futures) = System::connect(
-		1,
+		5,
 		vec![
 			(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 10000),
 			(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 10001),
@@ -16,7 +16,7 @@ async fn main() {
 
 	let driver_count = system.n_drivers();
 	let shard_count = system.n_shards();
-	let id_count = 10_000_000;
+	let id_count = 1_000_000;
 	let barrier = std::sync::Barrier::new(2 * (driver_count as usize) + 1);
 
 	let start_time = rayon::scope(|s| {

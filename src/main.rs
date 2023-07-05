@@ -3,7 +3,7 @@ use big_uf::*;
 fn main() {
 	let shard_count: u16 = 20;
 	let driver_count: usize = 10;
-	let id_count: u64 = 10_000_000;
+	let id_count: u64 = 1_000_000;
 
 	rayon::ThreadPoolBuilder::new()
 		.num_threads(2 * (driver_count as usize) + 1)
@@ -11,9 +11,7 @@ fn main() {
 		.unwrap();
 
 	let (mut drivers, shards) = System::local_shards(
-		|shard_id| {
-			move || storage::rocksdb::RocksDbStorage::from_path(format!("./rocksdbs/{shard_id}.db"))
-		},
+		|_shard_id| move || storage::ram::RamStorage::default(),
 		driver_count,
 		shard_count,
 	);
