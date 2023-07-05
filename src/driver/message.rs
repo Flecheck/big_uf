@@ -44,8 +44,8 @@ impl ReqId {
 impl std::fmt::Debug for ReqId {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("ReqId")
-			.field("shard", &self.driver())
-			.field("shard_specific_id", &self.driver_specific_id())
+			.field("driver", &self.driver())
+			.field("driver_specific_id", &self.driver_specific_id())
 			.finish()
 	}
 }

@@ -106,22 +106,17 @@ impl DriverAccess for crossbeam_channel::Sender<Vec<DriverMessage>> {
 
 pub(crate) struct RemoteDriverAccess {
 	pub driver_idx: u16,
-	pub system_channel: futures::channel::mpsc::UnboundedSender<Vec<NetworkMessage>>,
+	pub system_channel: futures::channel::mpsc::UnboundedSender<NetworkMessage>,
 }
 
 impl DriverAccess for RemoteDriverAccess {
 	fn send_messages(&self, batch: Vec<DriverMessage>) {
-		futures::executor::block_on(
-			self.system_channel.clone().send(
-				batch
-					.into_iter()
-					.map(|m| NetworkMessage::DriverMessage {
-						driver_idx: self.driver_idx,
-						message: m,
-					})
-					.collect(),
-			),
-		)
+		futures::executor::block_on(self.system_channel.clone().send(
+			NetworkMessage::DriverMessages {
+				driver_idx: self.driver_idx,
+				batch,
+			},
+		))
 		.unwrap()
 	}
 }

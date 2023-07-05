@@ -10,13 +10,13 @@ pub(crate) fn spawn<S: Storage, F: FnOnce() -> S + Send + 'static>(
 	storage_fn: F,
 	system: Arc<System>,
 	receiver: crossbeam_channel::Receiver<Vec<ShardMessage>>,
-	shard_idx: usize,
+	shard_id: usize,
 ) -> std::thread::JoinHandle<()> {
 	std::thread::spawn(move || {
 		let mut shard_data = UnionFindShardData {
 			other_shard_batching: MessageBatching::new(system),
 			current_shard_pending_messages: Vec::new(),
-			shard_idx,
+			shard_id,
 			storage: storage_fn(),
 		};
 		let mut n_processed_messages_without_flush = 0;
@@ -66,14 +66,14 @@ pub(crate) fn spawn<S: Storage, F: FnOnce() -> S + Send + 'static>(
 struct UnionFindShardData<S> {
 	other_shard_batching: MessageBatching,
 	current_shard_pending_messages: Vec<ShardMessage>,
-	shard_idx: usize,
+	shard_id: usize,
 	storage: S,
 }
 
 impl<S: Storage> UnionFindShardData<S> {
 	fn send(&mut self, message: ShardMessage) {
 		let target_shard = message.target_shard();
-		if target_shard == self.shard_idx {
+		if target_shard == self.shard_id {
 			self.current_shard_pending_messages.push(message);
 		} else {
 			self.other_shard_batching.send_to_shard(message);
@@ -87,7 +87,7 @@ impl<S: Storage> UnionFindShardData<S> {
 	fn process_message(&mut self, message: ShardMessage) -> Option<ReqId> {
 		match message {
 			ShardMessage::AddNode { shard, req_id } => {
-				debug_assert!(self.shard_idx == shard as usize);
+				debug_assert!(self.shard_id == shard as usize);
 				let new_node = self.storage.add_node(shard as usize);
 				self.send_to_driver(DriverMessage::AddNodeDone {
 					req_id,
@@ -176,7 +176,7 @@ impl<S: Storage> UnionFindShardData<S> {
 				};
 			}
 			ShardMessage::GracefulShutdown { shard, req_id } => {
-				debug_assert!(self.shard_idx == shard as usize);
+				debug_assert!(self.shard_id == shard as usize);
 				return Some(req_id);
 			}
 		}
@@ -195,23 +195,18 @@ impl ShardAccess for crossbeam_channel::Sender<Vec<ShardMessage>> {
 }
 
 pub(crate) struct RemoteShardAccess {
-	pub shard_idx: u16,
-	pub system_channel: futures::channel::mpsc::UnboundedSender<Vec<NetworkMessage>>,
+	pub shard_id: u16,
+	pub system_channel: futures::channel::mpsc::UnboundedSender<NetworkMessage>,
 }
 
 impl ShardAccess for RemoteShardAccess {
 	fn send_messages(&self, batch: Vec<ShardMessage>) {
-		futures::executor::block_on(
-			self.system_channel.clone().send(
-				batch
-					.into_iter()
-					.map(|m: ShardMessage| NetworkMessage::ShardMessage {
-						shard_idx: self.shard_idx,
-						message: m,
-					})
-					.collect(),
-			),
-		)
-		.unwrap()
+		futures::executor::block_on(self.system_channel.clone().send(
+			NetworkMessage::ShardMessages {
+				shard_id: self.shard_id,
+				batch,
+			},
+		))
+		.unwrap();
 	}
 }

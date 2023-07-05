@@ -1,12 +1,13 @@
 use std::{collections::HashMap, net::IpAddr, sync::Arc};
 
 use crate::{
+	driver::RemoteDriverAccess,
 	network_message::{Codec, NetworkMessage},
 	prelude::*,
 	shard::RemoteShardAccess,
 };
 use anyhow::{anyhow, bail, Result};
-use futures::{stream::FuturesUnordered, SinkExt, StreamExt};
+use futures::{stream::FuturesUnordered, Future, FutureExt, SinkExt, StreamExt, TryStreamExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::Framed;
 
@@ -55,23 +56,20 @@ impl System {
 		let local_shards_join_handles = shards_receivers
 			.into_iter()
 			.enumerate()
-			.map(|(idx, receiver)| crate::shard::spawn(storage(idx), system.clone(), receiver, idx))
+			.map(|(id, receiver)| crate::shard::spawn(storage(id), system.clone(), receiver, id))
 			.collect();
 		(drivers, local_shards_join_handles)
 	}
 
 	pub async fn connect(
-		num_shard_per_driver: u16,
+		num_shard_per_system: u16,
 		connect_to: Vec<(IpAddr, u16)>,
 	) -> Result<(
+		Driver,
 		Arc<Self>,
 		Vec<std::thread::JoinHandle<()>>,
-		FuturesUnordered<tokio::task::JoinHandle<()>>,
+		impl Future<Output = Result<()>>,
 	)> {
-		println!("{connect_to:?}");
-		let total_drivers = 1 + connect_to.len();
-		let total_threads = num_shard_per_driver as usize * total_drivers;
-
 		let mut sockets = HashMap::new();
 
 		for ((ip, port), id) in connect_to.iter().zip(1..) {
@@ -82,11 +80,10 @@ impl System {
 			} else {
 				Vec::new()
 			};
-			println!("Sending to {id} {connect:?}");
 			socket_framed
 				.send(NetworkMessage::Hello {
 					id: id as u16,
-					num_shard: num_shard_per_driver,
+					num_shard_per_system,
 					connect_to: connect,
 				})
 				.await?;
@@ -96,26 +93,28 @@ impl System {
 		let (s, r) = crossbeam_channel::unbounded();
 		let (driver_access, receiver_driver) = (Box::new(s) as Box<dyn DriverAccess>, r);
 
-		let (system_senders, receivers_system): (Vec<_>, Vec<_>) = (1..connect_to.len())
-			.map(|idx| futures::channel::mpsc::unbounded())
+		let (system_senders, receivers_system): (Vec<_>, Vec<_>) = (0..connect_to.len())
+			.map(|_idx| futures::channel::mpsc::unbounded())
 			.unzip();
 
 		let (local_shard_access, local_receivers_shard): (Vec<_>, Vec<_>) = (0
-			..num_shard_per_driver)
+			..num_shard_per_system)
 			.map(|_| {
 				let (s, r) = crossbeam_channel::unbounded::<Vec<ShardMessage>>();
 				(Box::new(s) as Box<dyn ShardAccess>, r)
 			})
 			.unzip();
 
-		let remote_shard_access = system_senders.iter().zip(1..).map(|(s, shard_idx)| {
-			Box::new(RemoteShardAccess {
-				shard_idx,
-				system_channel: s.clone(),
-			}) as Box<dyn ShardAccess>
+		let remote_shard_access = system_senders.iter().zip(1..).flat_map(|(s, shard_id)| {
+			(0..num_shard_per_system).map(move |i| {
+				Box::new(RemoteShardAccess {
+					shard_id: shard_id * num_shard_per_system + i,
+					system_channel: s.clone(),
+				}) as Box<dyn ShardAccess>
+			})
 		});
 
-		let union_find_system = Arc::new(Self {
+		let system = Arc::new(Self {
 			drivers: vec![driver_access],
 			shards: local_shard_access
 				.into_iter()
@@ -126,65 +125,68 @@ impl System {
 		let local_threads_join_handles = local_receivers_shard
 			.into_iter()
 			.enumerate()
-			.map(|(idx, receiver)| {
+			.map(|(id, receiver)| {
 				crate::shard::spawn(
 					|| crate::storage::ram::RamStorage::default(),
-					union_find_system.clone(),
+					system.clone(),
 					receiver.clone(),
-					idx,
+					id,
 				)
 			})
 			.collect();
 
-		// let futures = threads_join_handles
-		// 	.map(|(driver_id, channels)| {
-		// 		let socket = sockets.remove(&driver_id).unwrap();
+		let cloned_system = system.clone();
+		let forwarding = tokio::spawn(async {
+			receivers_system
+				.into_iter()
+				.zip(1..)
+				.map(move |(channel, system_id)| {
+					let socket = sockets.remove(&system_id).unwrap();
 
-		// 		let receiver_driver = receiver_drivers[driver_id].clone();
-		// 		let union_find_system = union_find_system.clone();
-		// 		let channels = channels.to_vec();
+					let system = cloned_system.clone();
+					tokio::spawn(async { handle_network_forwarding(channel, socket, system).await })
+				})
+				.collect::<FuturesUnordered<_>>()
+				.map(|x| Ok(x??))
+				.try_for_each(|_| async { anyhow::Ok(()) })
+				.await
+		})
+		.map(|x| Ok(x??));
 
-		// 		tokio::spawn(async move {
-		// 			handle_network_forwarding(
-		// 				driver_id,
-		// 				receiver_driver,
-		// 				channels,
-		// 				socket,
-		// 				union_find_system,
-		// 			);
-		// 		})
-		// 	})
-		// 	.collect::<FuturesUnordered<_>>();
-		let futures = todo!();
-		Ok((union_find_system, local_threads_join_handles, futures))
+		Ok((
+			Driver::new(MessageBatching::new(system.clone()), 0, receiver_driver),
+			system,
+			local_threads_join_handles,
+			forwarding,
+		))
 	}
 
 	pub async fn server(port: u16) -> Result<()> {
 		let listener = TcpListener::bind(format!("127.0.0.1:{port}")).await?;
 		let (stream, _) = listener.accept().await?;
-		let mut soket_master = Framed::new(stream, Codec::default());
+		let mut socket_master = Framed::new(stream, Codec::default());
 
-		let message = soket_master
+		let message = socket_master
 			.next()
 			.await
 			.ok_or_else(|| anyhow!("The stream was empty"))??;
 
-		let (self_id, num_thread, connect_to) = if let NetworkMessage::Hello {
+		let (self_id, num_shard_per_system, connect_to) = if let NetworkMessage::Hello {
 			id,
-			num_shard: num_thread,
+			num_shard_per_system,
 			connect_to,
 		} = message
 		{
-			(id, num_thread, connect_to)
+			(id, num_shard_per_system, connect_to)
 		} else {
 			bail!("The first message from the master should be Hello")
 		};
 
-		let mut threads = HashMap::new();
+		let mut sockets = HashMap::new();
 
-		threads.insert(0, soket_master);
+		sockets.insert(0, socket_master);
 
-		for i in 1..self_id {
+		for _ in 1..self_id {
 			let (stream, _) = listener.accept().await?;
 			let mut stream_framed = Framed::new(stream, Codec::default());
 			let message = stream_framed
@@ -193,7 +195,7 @@ impl System {
 				.ok_or_else(|| anyhow!("The stream was empty"))??;
 
 			if let NetworkMessage::Id { id } = message {
-				threads.insert(id, stream_framed);
+				sockets.insert(id, stream_framed);
 			} else {
 				bail!("The first message from a peer should be Id")
 			}
@@ -205,9 +207,97 @@ impl System {
 			socket_framed
 				.send(NetworkMessage::Id { id: self_id })
 				.await?;
+			sockets.insert(id, socket_framed);
 		}
 
-		unimplemented!()
+		let (local_shard_access, local_receivers_shard): (Vec<_>, Vec<_>) = (0
+			..num_shard_per_system)
+			.map(|_| {
+				let (s, r) = crossbeam_channel::unbounded::<Vec<ShardMessage>>();
+				(Box::new(s) as Box<dyn ShardAccess>, r)
+			})
+			.unzip();
+
+		let (ref system_senders, receivers_system): (Vec<_>, Vec<_>) = (0..sockets.len())
+			.map(|_idx| futures::channel::mpsc::unbounded())
+			.unzip();
+
+		let shards = (0..self_id)
+			.flat_map(|system_id| {
+				(0..num_shard_per_system).map(move |i| {
+					Box::new(RemoteShardAccess {
+						shard_id: system_id * num_shard_per_system + i,
+						system_channel: system_senders[system_id as usize].clone(),
+					}) as Box<dyn ShardAccess>
+				})
+			})
+			.chain(local_shard_access)
+			.chain(
+				(self_id + 1..sockets.len() as u16 + 1).flat_map(|system_id| {
+					(0..num_shard_per_system).map(move |i| {
+						Box::new(RemoteShardAccess {
+							shard_id: system_id * num_shard_per_system + i,
+							system_channel: (&system_senders)[system_id as usize - 1].clone(),
+						}) as Box<dyn ShardAccess>
+					})
+				}),
+			)
+			.collect();
+
+		let system = Arc::new(Self {
+			drivers: vec![Box::new(RemoteDriverAccess {
+				driver_idx: 0,
+				system_channel: system_senders[0].clone(),
+			}) as Box<dyn DriverAccess>],
+			shards,
+		});
+
+		let local_threads_join_handles = local_receivers_shard
+			.into_iter()
+			.enumerate()
+			.map(|(id, receiver)| {
+				crate::shard::spawn(
+					|| crate::storage::ram::RamStorage::default(),
+					system.clone(),
+					receiver.clone(),
+					id + (self_id * num_shard_per_system) as usize,
+				)
+			})
+			.collect::<Vec<_>>();
+
+		let forwarding = async {
+			receivers_system
+				.into_iter()
+				.zip(0..)
+				.map(|(channel, system_id)| {
+					let system_id = if system_id == self_id {
+						system_id + 1
+					} else {
+						system_id
+					};
+					let socket = sockets.remove(&system_id).unwrap();
+
+					let union_find_system = system.clone();
+					tokio::spawn(async {
+						handle_network_forwarding(channel, socket, union_find_system).await
+					})
+				})
+				.collect::<FuturesUnordered<_>>()
+				.map(|x| anyhow::Ok(x??))
+				.try_for_each(|_| async { Ok(()) })
+				.await
+		};
+
+		// let handle = tokio::task::spawn_blocking(|| {
+		// 	for t in local_threads_join_handles {
+		// 		t.join().unwrap()
+		// 	}
+		// })
+		// .map_err(|err| err.into());
+
+		futures::try_join!(/* handle, */ forwarding)?;
+
+		Ok(())
 	}
 
 	pub(crate) fn shard(&self, shard_id: usize) -> &dyn ShardAccess {
@@ -227,13 +317,42 @@ impl System {
 	}
 }
 
-fn handle_network_forwarding(
-	driver_id: usize,
-	receiver_driver: futures::channel::mpsc::UnboundedReceiver<Vec<DriverMessage>>,
+async fn handle_network_forwarding(
+	receiver: futures::channel::mpsc::UnboundedReceiver<NetworkMessage>,
 	socket: Framed<TcpStream, Codec>,
-	union_find_system: Arc<System>,
-) {
-	let message_batching = MessageBatching::new(union_find_system);
+	system: Arc<System>,
+) -> Result<()> {
+	let (sink, stream) = socket.split();
+	let forward_to_remote = async {
+		receiver.map(|x| Ok(x)).forward(sink).await?;
+		Err::<(), anyhow::Error>(anyhow!("The channel was closed"))
+	};
 
-	todo!()
+	let forward_from_remote = async move {
+		stream
+			.try_for_each(|m| async {
+				match m {
+					NetworkMessage::Hello {
+						id: _,
+						num_shard_per_system: _,
+						connect_to: _,
+					} => bail!("There should be no Hello messages at this point"),
+					NetworkMessage::Id { id: _ } => {
+						bail!("There should be no Id messages at this point")
+					}
+					NetworkMessage::DriverMessages { driver_idx, batch } => {
+						system.driver(driver_idx as usize).send_messages(batch)
+					}
+					NetworkMessage::ShardMessages { shard_id, batch } => {
+						system.shard(shard_id as usize).send_messages(batch)
+					}
+				};
+				Ok(())
+			})
+			.await?;
+
+		Err::<(), anyhow::Error>(anyhow!("The socket was closed"))
+	};
+
+	futures::try_join!(forward_from_remote, forward_to_remote).map(|_| ())
 }

@@ -10,19 +10,19 @@ use crate::{prelude::ShardMessage, DriverMessage};
 pub(crate) enum NetworkMessage {
 	Hello {
 		id: u16,
-		num_shard: u16,
+		num_shard_per_system: u16,
 		connect_to: Vec<(IpAddr, u16)>,
 	},
 	Id {
 		id: u16,
 	},
-	DriverMessage {
+	DriverMessages {
 		driver_idx: u16,
-		message: DriverMessage,
+		batch: Vec<DriverMessage>,
 	},
-	ShardMessage {
-		shard_idx: u16,
-		message: ShardMessage,
+	ShardMessages {
+		shard_id: u16,
+		batch: Vec<ShardMessage>,
 	},
 }
 

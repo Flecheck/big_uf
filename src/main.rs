@@ -11,10 +11,8 @@ fn main() {
 		.unwrap();
 
 	let (mut drivers, shards) = System::local_shards(
-		|shard_idx| {
-			move || {
-				storage::rocksdb::RocksDbStorage::from_path(format!("./rocksdbs/{shard_idx}.db"))
-			}
+		|shard_id| {
+			move || storage::rocksdb::RocksDbStorage::from_path(format!("./rocksdbs/{shard_id}.db"))
 		},
 		driver_count,
 		shard_count,
