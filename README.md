@@ -15,7 +15,7 @@ The workers can be started with :
 And the master can be started with :
 `cargo run --release --bin master`
 
-The master currently expect two worker on the same machine that have port 10000 and 10001
+The master currently expect two worker on the same machine that have port 10000 and 10001, it can be changed in the src/bin/master.rs file
 
 It will just add new nodes to the union find
 
