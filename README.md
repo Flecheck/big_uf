@@ -1,5 +1,13 @@
 # This is a distributed/parrallel union find algorithm
 
+This is a distributed and parrallel union find algorithm to use when the union find is too big for a single machine or to have 
+the structure scale with the amount of cores of the machine.
+
+This library is a work in progress and was made with my brother Ten0.
+The parallel part of the program was made with liveshare and the distributed part was made by me.
+
+# How to use
+
 
 The default parrallel in memory version can be run with :
 `cargo run --release --bin big_uf`
